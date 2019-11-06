@@ -1,0 +1,68 @@
+---
+title: "Stat 425 Group Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: 'STAT 425: Final Project'
+author: "Spring 2019, Drew, Jason Luo, Kris Kresto"
+date: 'Due: Tuesday, December 17th by 11:59 PM CT'
+output:
+  html_document:
+    theme: readable
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+
+```{r}
+# loading library, setting seed 
+library(dplyr)
+```
+
+
+```{r}
+#train_csv = read.csv(“path/to/train.csv”)
+#key_csv = “” “”
+#weather_csv = “” “”
+#walmart_csv = “” “”
+```
+
+```{r}
+weather_csv$t
+```
+
+```{r}
+dplyr::inner_join(x = train_csv, y = key_csv, by = "store_nbr")
+full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_nbr"))
+```
+
+
+
+
+# Section 1: Introduction 
+
+
+
+# Section 2: Exploratory Data Analysis 
+
+```{r}
+
+str(full_set)
+# graphical analysis 
+# Adding time variables 
+```
+
+# Section 3: Linear Regression 
+
+```{r}
+bad_model = lm(units ~ ., data = full_set)
+```
+
+# Section 4: Improvements
+
