@@ -1,13 +1,4 @@
 ---
-title: "Stat 425 Group Project"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
----
 title: 'STAT 425: Final Project'
 author: "Spring 2019, Drew, Jason Luo, Kris Kresto"
 date: 'Due: Tuesday, December 17th by 11:59 PM CT'
@@ -19,6 +10,12 @@ output:
     toc: yes
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
 
 ```{r}
 # loading library, setting seed 
@@ -27,18 +24,84 @@ library(dplyr)
 
 
 ```{r}
-#train_csv = read.csv(“path/to/train.csv”)
-#key_csv = “” “”
-#weather_csv = “” “”
-#walmart_csv = “” “”
+train_csv = read.csv('train.csv')
+key_csv = read.csv("key.csv")
+weather_csv_new = read.csv("weather.csv")
+test_csv = read.csv("walmart.csv")
 ```
 
 ```{r}
-weather_csv$t
+weather_csv = weather_csv_new
+
+double_converts = c("sealevel", "stnpressure", "preciptotal", "snowfall", "resultspeed", "avgspeed")
+for (name in double_converts) {
+  weather_csv[, name] = as.double(as.character(weather_csv[, name]))
+}
+
+int_converts = c("tmax", "tmin", "tavg", "dewpoint", "depart", "wetbulb", "heat", "cool")
+for (name in int_converts) {
+  weather_csv[, name] = as.integer(as.character(weather_csv[, name]))
+}
+
+split_date_hypen = strsplit(as.character(weather_csv$date), "-")
+
+weather_csv$year = ""
+weather_csv$month = ""
+weather_csv$day = ""
+
+for (i in 1:nrow(weather_csv)) {
+  weather_csv[i, "year"] = split_date_hypen[[i]][1]
+  weather_csv[i, "month"] = split_date_hypen[[i]][2]
+  weather_csv[i, "day"] = split_date_hypen[[i]][3]
+}
+
+weather_csv$year = as.factor(weather_csv$year)
+weather_csv$month = as.factor(weather_csv$month)
+weather_csv$day = as.factor(weather_csv$day)
+
+weather_csv$heat_cool = weather_csv$heat - weather_csv$cool
+
+weather_csv$resultdir = as.double(as.character(weather_csv$resultdir))
+deg_to_rad_ratio = pi / 18
+weather_csv$resultdir = sin(weather_csv$resultdir * deg_to_rad_ratio)
+
+weather_csv
+#TODO perform box-cox on variance in sealevel
 ```
 
 ```{r}
-dplyr::inner_join(x = train_csv, y = key_csv, by = "store_nbr")
+#weather_csv$diff_sealevel_from_mean = 
+library(dplyr)
+
+weather_csv %>%
+  filter(!is.na(sealevel)) %>%
+  group_by(station_nbr) %>%
+  mutate(sealevel_diff = sealevel - mean(sealevel))
+
+names = colnames(weather_csv)
+for (name in names) {
+  if(sum(is.na(weather_csv[,name])) > 0) {
+    print(paste0("There are Na(s) in ", name))
+  }
+}
+  
+# plot_points = function(vec) {
+#   print(vec)
+#   qqnorm(vec)
+#   qqline(vec, col = 2)
+# }
+# 
+# weather_csv %>%
+#   filter(!is.na(preciptotal)) %>%
+#   group_by(station_nbr) %>%
+#   do(plot_points(.$preciptotal)) %>%
+#   ungroup()
+
+  
+```
+
+```{r}
+key_and_train = dplyr::inner_join(x = train_csv, y = key_csv, by = "store_nbr")
 full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_nbr"))
 ```
 
@@ -52,6 +115,9 @@ full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_n
 # Section 2: Exploratory Data Analysis 
 
 ```{r}
+
+dropped_columns = c("sunrise", "sunset", "date", "heat", "cool")
+weather_csv = weather_csv[ , !(names(weather_csv) %in% dropped_columns)]
 
 str(full_set)
 # graphical analysis 
