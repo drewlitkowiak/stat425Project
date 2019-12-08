@@ -65,9 +65,73 @@ weather_csv$resultdir = as.double(as.character(weather_csv$resultdir))
 deg_to_rad_ratio = pi / 18
 weather_csv$resultdir = sin(weather_csv$resultdir * deg_to_rad_ratio)
 
-weather_csv
+#weather_csv
 #TODO perform box-cox on variance in sealevel
 ```
+
+
+```{r}
+# Impute data for sealevel
+library(dplyr)
+library(imputeTS)
+
+weather_csv = weather_csv %>%
+     group_by(station_nbr) %>%
+     mutate(sealevel = ifelse(station_nbr == 8, sealevel, na_interpolation(sealevel))) %>%
+    ungroup(station_nbr)
+
+combined_sealevels <- vector("list", 19)
+iter_seq = c(1:4, 6:20)
+
+for (i in iter_seq) {
+  var_name = paste0("slevel", i)
+  assign(var_name, weather_csv[weather_csv$station_nbr == i, "sealevel"])
+  combined_sealevels[[i]] = get(var_name)
+  rm(list=c(var_name))
+}
+
+combined_sealevels = as.data.frame( matrix(unlist(combined_sealevels), ncol = 19) )
+means = rowMeans(combined_sealevels[, -7])
+
+weather_csv = weather_csv %>%
+  group_by(station_nbr) %>%
+  mutate(sealevel = ifelse(station_nbr == 8, means, sealevel)) %>%
+  ungroup(station_nbr)
+```
+
+```{r}
+#impute snowfall
+library(sjmisc)
+
+is_snowing = function(string) {
+  return(str_contains(string, "SN"))
+}
+is_snowing.vec = Vectorize(is_snowing, vectorize.args = c("string"))
+
+weather_csv = weather_csv %>%
+  mutate(does_snow = is_snowing.vec(as.character(codesum))) %>%
+  mutate(snowfall = ifelse(is.na(snowfall) & !does_snow, 0, snowfall))
+
+
+weather_csv = weather_csv %>%
+  group_by(month, station_nbr, codesum) %>%
+  mutate(snowfall = ifelse(is.na(snowfall), mean(snowfall, na.rm = TRUE), snowfall)) %>%
+  ungroup(codesum) %>%
+  mutate(snowfall = ifelse(is.na(snowfall), mean(snowfall, na.rm = TRUE), snowfall)) %>%
+  ungroup(station_nbr) %>%
+  mutate(snowfall = ifelse(is.na(snowfall), mean(snowfall, na.rm = TRUE), snowfall)) %>%
+  ungroup(month) %>%
+  group_by(station_nbr) %>%
+  mutate(snowfall = na_interpolation(snowfall))
+```
+
+```{r}
+key_and_train = key_and_train %>%
+  group_by(store_nbr, item_nbr) %>%
+  filter(sum(units) != 0) %>%
+  ungroup(store_nbr, item_nbr)
+```
+
 
 ```{r}
 #weather_csv$diff_sealevel_from_mean = 
@@ -80,25 +144,14 @@ weather_csv %>%
 
 names = colnames(weather_csv)
 for (name in names) {
-  if(sum(is.na(weather_csv[,name])) > 0) {
-    print(paste0("There are Na(s) in ", name))
+  total_missing = sum(is.na(weather_csv[,name]))
+  if(total_missing > 0) {
+    print(paste0("There are Na(s) in ", name, " with percent missing ", 100* total_missing / nrow(weather_csv), "%"))
   }
 }
   
-# plot_points = function(vec) {
-#   print(vec)
-#   qqnorm(vec)
-#   qqline(vec, col = 2)
-# }
-# 
-# weather_csv %>%
-#   filter(!is.na(preciptotal)) %>%
-#   group_by(station_nbr) %>%
-#   do(plot_points(.$preciptotal)) %>%
-#   ungroup()
-
-  
 ```
+
 
 ```{r}
 key_and_train = dplyr::inner_join(x = train_csv, y = key_csv, by = "store_nbr")
@@ -116,18 +169,27 @@ full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_n
 
 ```{r}
 
-dropped_columns = c("sunrise", "sunset", "date", "heat", "cool")
+dropped_columns = c("sunrise", "sunset", "depart", "heat", "cool")
 weather_csv = weather_csv[ , !(names(weather_csv) %in% dropped_columns)]
 
-str(full_set)
+dropped_columns = c("date", dropped_columns)
+full_set = full_set[ , !(names(full_set) %in% dropped_columns)]
+
 # graphical analysis 
 # Adding time variables 
 ```
+
+```{r}
+bad_model = readRDS("/Volumes/SMALLDRIVE/lm_model.rds")
+```
+
 
 # Section 3: Linear Regression 
 
 ```{r}
 bad_model = lm(units ~ ., data = full_set)
+no_model = lm(units ~ preciptotal, data = full_set)
+summary(no_model)
 ```
 
 # Section 4: Improvements
