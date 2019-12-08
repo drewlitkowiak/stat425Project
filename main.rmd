@@ -144,12 +144,11 @@ weather_csv %>%
 
 names = colnames(weather_csv)
 for (name in names) {
-<<<<<<< HEAD
   if(sum(is.na(weather_csv[,name])) > 0) {
-    print(paste0("There are Na(s) in ", name))
-    
-    weather_csv[is.na(weather_csv[,name]), name] = mean(weather_csv[,name], na.rm = TRUE)
-    print("Mean values imputed")
+      print(paste0("There are Na(s) in ", name))
+      
+      weather_csv[is.na(weather_csv[,name]), name] = median(weather_csv[,name], na.rm = TRUE)
+      print("Mean values imputed")
   }
 }
   
@@ -168,21 +167,6 @@ weather_csv
   
 ```
 
-=======
-  total_missing = sum(is.na(weather_csv[,name]))
-  if(total_missing > 0) {
-    print(paste0("There are Na(s) in ", name, " with percent missing ", 100* total_missing / nrow(weather_csv), "%"))
-  }
-}
-  
-```
-
-
-```{r}
-key_and_train = dplyr::inner_join(x = train_csv, y = key_csv, by = "store_nbr")
-full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_nbr"))
-```
->>>>>>> 11ddf93febaa3c71debfd73dbe8a8c81f5193d7e
 
 
 
@@ -195,18 +179,13 @@ full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_n
 
 ```{r}
 
-<<<<<<< HEAD
-dropped_columns = c("sunrise", "sunset", "heat", "cool")
-weather_csv = weather_csv[ , !(names(weather_csv) %in% dropped_columns)]
 
-=======
 dropped_columns = c("sunrise", "sunset", "depart", "heat", "cool")
 weather_csv = weather_csv[ , !(names(weather_csv) %in% dropped_columns)]
 
 dropped_columns = c("date", dropped_columns)
 full_set = full_set[ , !(names(full_set) %in% dropped_columns)]
 
->>>>>>> 11ddf93febaa3c71debfd73dbe8a8c81f5193d7e
 # graphical analysis 
 # Adding time variables 
 ```
@@ -237,8 +216,10 @@ full_set
 
 
 ```{r}
+library(MASS)
+
 bad_model = lm(units ~ ., data = full_set)
-<<<<<<< HEAD
+
 empty_model = lm(units ~ 1, data = full_set)
 
 forward_model = step(empty_model, scope = list(upper = bad_model, lower = empty_model), direction = "forward")
@@ -272,10 +253,7 @@ for(i in seq(0, 1, by = 0.1)) {
 }
 
 
-=======
-no_model = lm(units ~ preciptotal, data = full_set)
-summary(no_model)
->>>>>>> 11ddf93febaa3c71debfd73dbe8a8c81f5193d7e
+
 ```
 
 # Section 4: Improvements
