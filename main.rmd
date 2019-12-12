@@ -24,11 +24,20 @@ library(dplyr)
 
 
 ```{r}
-train_csv = read.csv('csv/train.csv')
+train_csv_new = read.csv('csv/train.csv')
 key_csv = read.csv("csv/key.csv")
 weather_csv_new = read.csv("csv/weather.csv")
 test_csv = read.csv("csv/test.csv")
 ```
+
+
+```{r}
+train_csv = train_csv_new %>%
+  group_by(store_nbr, item_nbr) %>%
+  filter(sum(units) != 0) %>%
+  ungroup(store_nbr, item_nbr)
+```
+
 
 ```{r}
 weather_csv = weather_csv_new
@@ -38,8 +47,8 @@ for (name in double_converts) {
   weather_csv[, name] = as.double(as.character(weather_csv[, name]))
 }
 
-int_converts = c("tmax", "tmin", "tavg", "dewpoint", "depart", "wetbulb", "heat", "cool")
-for (name in int_converts) {
+numeric_converts = c("tmax", "tmin", "tavg", "dewpoint", "depart", "wetbulb", "heat", "cool")
+for (name in numeric_converts) {
   weather_csv[, name] = as.double(as.character(weather_csv[, name]))
 }
 
@@ -69,6 +78,49 @@ weather_csv$resultdir = sin(weather_csv$resultdir * deg_to_rad_ratio)
 #TODO perform box-cox on variance in sealevel
 ```
 
+
+
+
+
+```{r}
+#weather_csv$diff_sealevel_from_mean = 
+#library(dplyr)
+#
+#weather_csv %>%
+#  filter(!is.na(sealevel)) %>%
+#  group_by(station_nbr) %>%
+#  mutate(sealevel_diff = sealevel - mean(sealevel))
+
+```
+
+```{r}
+# median impute NA values.
+names = c(double_converts, numeric_converts)
+for (name in names) {
+  na_values = sum(is.na(weather_csv[,name]))
+  if( na_values > 0) {
+      print(paste0("There are Na(s) in ", name, " with percent occurence ", 100 * na_values / nrow(weather_csv)))
+      weather_csv[is.na(weather_csv[, name]), name] = median(weather_csv[, name], na.rm = TRUE)
+      print("Median values imputed")
+  }
+}
+  
+# plot_points = function(vec) {
+#   print(vec)
+#   qqnorm(vec)
+#   qqline(vec, col = 2)
+# }
+# 
+# weather_csv %>%
+#   filter(!is.na(preciptotal)) %>%
+#   group_by(station_nbr) %>%
+#   do(plot_points(.$preciptotal)) %>%
+#   ungroup()
+  
+```
+
+
+# Advanced, non-median imputes
 
 ```{r}
 # Impute data for sealevel
@@ -125,50 +177,6 @@ weather_csv = weather_csv %>%
   mutate(snowfall = na_interpolation(snowfall))
 ```
 
-```{r}
-key_and_train = key_and_train %>%
-  group_by(store_nbr, item_nbr) %>%
-  filter(sum(units) != 0) %>%
-  ungroup(store_nbr, item_nbr)
-```
-
-
-```{r}
-#weather_csv$diff_sealevel_from_mean = 
-library(dplyr)
-
-weather_csv %>%
-  filter(!is.na(sealevel)) %>%
-  group_by(station_nbr) %>%
-  mutate(sealevel_diff = sealevel - mean(sealevel))
-
-names = colnames(weather_csv)
-for (name in names) {
-  if(sum(is.na(weather_csv[,name])) > 0) {
-      print(paste0("There are Na(s) in ", name))
-      
-      weather_csv[is.na(weather_csv[,name]), name] = median(weather_csv[,name], na.rm = TRUE)
-      print("Mean values imputed")
-  }
-}
-  
-# plot_points = function(vec) {
-#   print(vec)
-#   qqnorm(vec)
-#   qqline(vec, col = 2)
-# }
-# 
-# weather_csv %>%
-#   filter(!is.na(preciptotal)) %>%
-#   group_by(station_nbr) %>%
-#   do(plot_points(.$preciptotal)) %>%
-#   ungroup()
-weather_csv
-  
-```
-
-
-
 
 
 # Section 1: Introduction 
@@ -177,84 +185,124 @@ weather_csv
 
 # Section 2: Exploratory Data Analysis 
 
+
+
 ```{r}
-
-
+# drop unnecessary columns from weather
 dropped_columns = c("sunrise", "sunset", "depart", "heat", "cool")
 weather_csv = weather_csv[ , !(names(weather_csv) %in% dropped_columns)]
-
-dropped_columns = c("date", dropped_columns)
-full_set = full_set[ , !(names(full_set) %in% dropped_columns)]
-
-# graphical analysis 
-# Adding time variables 
 ```
 
 ```{r}
-bad_model = readRDS("/Volumes/SMALLDRIVE/lm_model.rds")
+key_and_train = dplyr::inner_join(x = train_csv, y = key_csv, by = "store_nbr")
+
+full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_nbr"))
+
+full_set$date = as.Date(full_set$date)
+full_set$weekday = weekdays(full_set$date)
+full_set$month = months(full_set$date)
 ```
+
+
+
+```{r}
+# Save full_set to disk
+#saveRDS(full_set, "full_set.rds")
+#rm(list = ls())
+```
+
 
 
 # Section 3: Linear Regression 
 
-```{r}
-key_and_train = dplyr::inner_join(x = train_csv, y = key_csv, by = "store_nbr")
-full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_nbr"))
-
-dropped_columns = c("date")
-full_set = full_set[ , !(names(full_set) %in% dropped_columns)]
-
-saveRDS(full_set, "full_set.rds")
-
-rm(list = ls())
-```
 
 ```{r}
-full_set = readRDS("full_set.rds")
+#full_set = readRDS("full_set.rds")
 full_set
 ```
 
 
 ```{r}
-library(MASS)
-
-bad_model = lm(units ~ ., data = full_set)
-
-empty_model = lm(units ~ 1, data = full_set)
-
-forward_model = step(empty_model, scope = list(upper = bad_model, lower = empty_model), direction = "forward")
+#library(MASS)
+#
+#bad_model = lm(units ~ ., data = full_set)
+#
+#empty_model = lm(units ~ 1, data = full_set)
+#
+#forward_model = step(empty_model, scope = list(upper = bad_model, lower = empty_model), #direction = "forward")
 ```
 
 ```{r}
-library(glmnet)
-
-#for testing purposes
-#full_set = full_set[1:2000, ]
-memory.limit(128 * 1024)
-
-response_vec = full_set$units
-full_set = full_set[, !(colnames(full_set) == "units")]
-full_set = model.matrix(~ ., data = full_set)
-full_set
+model = lm(log(units + 1) ~ weekday + month + factor(store_nbr) + factor(item_nbr), data = full_set)
+```
 
 
-
-
-
-for(i in seq(0, 1, by = 0.1)) {
-  print(paste0("Running glmnet with alpha = ", i, "..."))
-  glmnet(full_set, response_vec, alpha = i)
-  model_name = paste0("glm_model_", i*10)
-  assign(model_name, glmnet(full_set, response_vec, alpha = i))
-  file_name = paste0(model_name, ".rds")
-  print(paste("Model generated. Saving to file as", file_name))
-  saveRDS(get(model_name), file = file_name)
-  rm(list = c(model_name))
-}
-
+```{r}
+#library(glmnet)
+#
+##for testing purposes
+##full_set = full_set[1:2000, ]
+#memory.limit(128 * 1024)
+#
+#response_vec = full_set$units
+#full_set = full_set[, !(colnames(full_set) == "units")]
+#full_set = model.matrix(~ ., data = full_set)
+#full_set
+#
+#
+#
+#
+#
+#for(i in seq(0, 1, by = 0.1)) {
+#  print(paste0("Running glmnet with alpha = ", i, "..."))
+#  glmnet(full_set, response_vec, alpha = i)
+#  model_name = paste0("glm_model_", i*10)
+#  assign(model_name, glmnet(full_set, response_vec, alpha = i))
+#  file_name = paste0(model_name, ".rds")
+#  print(paste("Model generated. Saving to file as", file_name))
+#  saveRDS(get(model_name), file = file_name)
+#  rm(list = c(model_name))
+#}
 
 
 ```
+
+
+```{r}
+key_and_test = dplyr::inner_join(x = test_csv, y = key_csv, by = "store_nbr")
+
+tb = unique(key_and_train[, c("store_nbr", "item_nbr")])
+
+library(plyr)
+library(dplyr)
+
+key_and_test_nonzero = key_and_test %>%
+  group_by(store_nbr, item_nbr) %>%
+  filter(nrow(match_df(tb, data.frame(store_nbr = store_nbr, item_nbr = item_nbr), on = c("store_nbr", "item_nbr"))) > 0) %>%
+  ungroup(store_nbr, item_nbr)
+
+
+test_set = dplyr::inner_join(key_and_test_nonzero, weather_csv, by=c("date", "station_nbr"))
+
+test_set$date = as.Date(test_set$date)
+test_set$weekday = weekdays(test_set$date)
+test_set$month = months(test_set$date)
+
+result_fitted_nonzero = data.frame("id" = paste(test_set$store_nbr, test_set$item_nbr, test_set$date, sep = "_"), "units" = predict.lm(model, test_set))
+result_fitted_nonzero$units[result_fitted_nonzero$units < 0] = 0
+
+key_and_test_zero = key_and_test %>%
+  group_by(store_nbr, item_nbr) %>%
+  filter(nrow(match_df(tb, data.frame(store_nbr = store_nbr, item_nbr = item_nbr), on = c("store_nbr", "item_nbr"))) <= 0) %>%
+  ungroup(store_nbr, item_nbr) %>%
+  select(date, store_nbr, item_nbr)
+
+result_fitted_zero = data.frame("id" = paste(key_and_test_zero$store_nbr, key_and_test_zero$item_nbr, key_and_test_zero$date, sep = "_"), "units" = 0)
+
+total = rbind(result_fitted_zero, result_fitted_nonzero)
+write.csv(total, file = "submission.csv", row.names = FALSE)
+```
+
 
 # Section 4: Improvements
 
