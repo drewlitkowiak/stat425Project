@@ -188,7 +188,6 @@ weather_csv = weather_csv %>%
   ungroup(station_nbr) %>%
   mutate(preciptotal = ifelse(is.na(preciptotal), median(preciptotal, na.rm = TRUE), preciptotal)) %>%
   ungroup(month)
-  
 ```
 
 ```{r}
@@ -297,7 +296,7 @@ cur_form = log(units + 1) ~ weekday + month + store_nbr + item_nbr + year
 
 full_form = log(units + 1) ~ .
 
-both_model = step(model, scope = list(upper = bad_model, lower = model), direction = "both", k = 2)
+both_model = step(model, scope = list(upper = bad_model, lower = model), direction = "forward", k = 2)
 ```
 
 
