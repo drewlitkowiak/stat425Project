@@ -25,9 +25,9 @@ library(dplyr)
 
 ```{r}
 train_csv_new = read.csv('csv/train.csv')
-key_csv = read.csv("csv/key.csv")
+key_csv_new = read.csv("csv/key.csv")
 weather_csv_new = read.csv("csv/weather.csv")
-test_csv = read.csv("csv/test.csv")
+test_csv_new = read.csv("csv/test.csv")
 ```
 
 
@@ -36,6 +36,23 @@ train_csv = train_csv_new %>%
   group_by(store_nbr, item_nbr) %>%
   filter(sum(units) != 0) %>%
   ungroup(store_nbr, item_nbr)
+
+train_csv$store_nbr = as.factor(train_csv$store_nbr)
+train_csv$item_nbr = as.factor(train_csv$item_nbr)
+```
+
+```{r}
+key_csv = key_csv_new
+
+key_csv$store_nbr = as.factor(key_csv$store_nbr)
+key_csv$station_nbr = as.factor(key_csv$station_nbr)
+```
+
+```{r}
+test_csv = test_csv_new
+
+test_csv$store_nbr = as.factor(test_csv$store_nbr)
+test_csv$item_nbr = as.factor(test_csv$item_nbr)
 ```
 
 
@@ -74,6 +91,8 @@ weather_csv$resultdir = as.double(as.character(weather_csv$resultdir))
 deg_to_rad_ratio = pi / 18
 weather_csv$resultdir = sin(weather_csv$resultdir * deg_to_rad_ratio)
 
+weather_csv$station_nbr = as.factor(weather_csv$station_nbr)
+
 #weather_csv
 #TODO perform box-cox on variance in sealevel
 ```
@@ -93,31 +112,7 @@ weather_csv$resultdir = sin(weather_csv$resultdir * deg_to_rad_ratio)
 
 ```
 
-```{r}
-# median impute NA values.
-names = c(double_converts, numeric_converts)
-for (name in names) {
-  na_values = sum(is.na(weather_csv[,name]))
-  if( na_values > 0) {
-      print(paste0("There are Na(s) in ", name, " with percent occurence ", 100 * na_values / nrow(weather_csv)))
-      weather_csv[is.na(weather_csv[, name]), name] = median(weather_csv[, name], na.rm = TRUE)
-      print("Median values imputed")
-  }
-}
-  
-# plot_points = function(vec) {
-#   print(vec)
-#   qqnorm(vec)
-#   qqline(vec, col = 2)
-# }
-# 
-# weather_csv %>%
-#   filter(!is.na(preciptotal)) %>%
-#   group_by(station_nbr) %>%
-#   do(plot_points(.$preciptotal)) %>%
-#   ungroup()
-  
-```
+
 
 
 # Advanced, non-median imputes
@@ -178,6 +173,56 @@ weather_csv = weather_csv %>%
 ```
 
 
+```{r}
+library(imputeTS)
+library(dplyr)
+
+weather_csv = weather_csv %>%
+  group_by(station_nbr) %>%
+  mutate(tmax = na_interpolation(tmax)) %>%
+  ungroup(station_nbr)
+
+weather_csv = weather_csv %>%
+  group_by(month, station_nbr) %>%
+  mutate(preciptotal = ifelse(is.na(preciptotal), median(preciptotal, na.rm = TRUE), preciptotal)) %>%
+  ungroup(station_nbr) %>%
+  mutate(preciptotal = ifelse(is.na(preciptotal), median(preciptotal, na.rm = TRUE), preciptotal)) %>%
+  ungroup(month)
+  
+```
+
+```{r}
+#saveRDS(forward_model, "forward_model.rds")
+```
+
+
+```{r}
+library(tibble)
+# median impute NA values.
+names = c(double_converts, numeric_converts)
+for (name in names) {
+  na_values = sum(is.na(weather_csv[,name]))
+  if( na_values > 0) {
+      print(paste0("There are Na(s) in ", name, " with percent occurence ", 100 * na_values / nrow(weather_csv)))
+      weather_csv[is.na(weather_csv[, name]), name] = median(deframe(weather_csv[, name]), na.rm = TRUE)
+      print("Median values imputed")
+  }
+}
+  
+# plot_points = function(vec) {
+#   print(vec)
+#   qqnorm(vec)
+#   qqline(vec, col = 2)
+# }
+# 
+# weather_csv %>%
+#   filter(!is.na(preciptotal)) %>%
+#   group_by(station_nbr) %>%
+#   do(plot_points(.$preciptotal)) %>%
+#   ungroup()
+  
+```
+
 
 # Section 1: Introduction 
 
@@ -201,6 +246,8 @@ full_set = dplyr::inner_join(key_and_train, weather_csv, by=c("date", "station_n
 full_set$date = as.Date(full_set$date)
 full_set$weekday = weekdays(full_set$date)
 full_set$month = months(full_set$date)
+
+full_set = full_set[ , !(names(full_set) %in% c("date"))]
 ```
 
 
@@ -227,16 +274,37 @@ full_set$station_nbr = as.factor(full_set$station_nbr)
 ```{r}
 library(MASS)
 #
-bad_model = lm(units ~ ., data = full_set)
+bad_model = lm(log(units + 1) ~ ., data = full_set)
 #
-empty_model = lm(units ~ 1, data = full_set)
+empty_model = lm(log(units + 1) ~ 1, data = full_set)
 #
-forward_model = step(empty_model, scope = list(upper = bad_model, lower = empty_model), direction = "forward")
+forward_model = step(empty_model, scope = list(upper = bad_model, lower = empty_model), direction = "forward", k = log(nrow(full_set)))
+
+ summ = summary(forward_model)
 ```
+
+
 
 ```{r}
 model = lm(log(units + 1) ~ weekday + month + store_nbr + item_nbr + year, data = full_set)
+
+#summary(model)
 ```
+
+
+```{r}
+cur_form = log(units + 1) ~ weekday + month + store_nbr + item_nbr + year
+
+full_form = log(units + 1) ~ .
+
+both_model = step(model, scope = list(upper = bad_model, lower = model), direction = "both", k = 2)
+```
+
+
+```{r}
+summary(forward_model)
+```
+
 
 
 ```{r}
@@ -269,6 +337,11 @@ model = lm(log(units + 1) ~ weekday + month + store_nbr + item_nbr + year, data 
 
 ```
 
+```{r}
+model = forward_model
+```
+
+
 
 ```{r}
 library(plyr)
@@ -285,7 +358,6 @@ key_and_test_nonzero = key_and_test %>%
   filter(nrow(match_df(tb, data.frame(store_nbr = store_nbr, item_nbr = item_nbr), on = c("store_nbr", "item_nbr"))) > 0) %>%
   ungroup(store_nbr, item_nbr)
 
-
 test_set = dplyr::inner_join(key_and_test_nonzero, weather_csv, by=c("date", "station_nbr"))
 
 test_set$date = as.Date(test_set$date)
@@ -301,7 +373,7 @@ key_and_test_zero = key_and_test %>%
   group_by(store_nbr, item_nbr) %>%
   filter(nrow(match_df(tb, data.frame(store_nbr = store_nbr, item_nbr = item_nbr), on = c("store_nbr", "item_nbr"))) <= 0) %>%
   ungroup(store_nbr, item_nbr) %>%
-  select(date, store_nbr, item_nbr)
+  dplyr::select(date, store_nbr, item_nbr)
 
 result_fitted_zero = data.frame("id" = paste(key_and_test_zero$store_nbr, key_and_test_zero$item_nbr, key_and_test_zero$date, sep = "_"), "units" = 0)
 
