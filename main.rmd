@@ -218,22 +218,24 @@ full_set$month = months(full_set$date)
 
 ```{r}
 #full_set = readRDS("full_set.rds")
-full_set
+full_set$store_nbr = as.factor(full_set$store_nbr)
+full_set$item_nbr = as.factor(full_set$item_nbr)
+full_set$station_nbr = as.factor(full_set$station_nbr)
 ```
 
 
 ```{r}
-#library(MASS)
+library(MASS)
 #
-#bad_model = lm(units ~ ., data = full_set)
+bad_model = lm(units ~ ., data = full_set)
 #
-#empty_model = lm(units ~ 1, data = full_set)
+empty_model = lm(units ~ 1, data = full_set)
 #
-#forward_model = step(empty_model, scope = list(upper = bad_model, lower = empty_model), #direction = "forward")
+forward_model = step(empty_model, scope = list(upper = bad_model, lower = empty_model), direction = "forward")
 ```
 
 ```{r}
-model = lm(log(units + 1) ~ weekday + month + factor(store_nbr) + factor(item_nbr), data = full_set)
+model = lm(log(units + 1) ~ weekday + month + store_nbr + item_nbr + year, data = full_set)
 ```
 
 
@@ -269,12 +271,14 @@ model = lm(log(units + 1) ~ weekday + month + factor(store_nbr) + factor(item_nb
 
 
 ```{r}
+library(plyr)
+library(dplyr)
+
 key_and_test = dplyr::inner_join(x = test_csv, y = key_csv, by = "store_nbr")
 
 tb = unique(key_and_train[, c("store_nbr", "item_nbr")])
 
-library(plyr)
-library(dplyr)
+# Pull all observations that our model can predict for
 
 key_and_test_nonzero = key_and_test %>%
   group_by(store_nbr, item_nbr) %>%
@@ -287,6 +291,8 @@ test_set = dplyr::inner_join(key_and_test_nonzero, weather_csv, by=c("date", "st
 test_set$date = as.Date(test_set$date)
 test_set$weekday = weekdays(test_set$date)
 test_set$month = months(test_set$date)
+
+# Create the submission file
 
 result_fitted_nonzero = data.frame("id" = paste(test_set$store_nbr, test_set$item_nbr, test_set$date, sep = "_"), "units" = predict.lm(model, test_set))
 result_fitted_nonzero$units[result_fitted_nonzero$units < 0] = 0
